@@ -1,6 +1,6 @@
 {
   "connection_parameters": {
-    "host": "192.168.1.103",
+    "host": "localhost",
     "user": "engineeer",
     "password": "password",
     "database": "programs_db",
