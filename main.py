@@ -88,7 +88,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def on_selection(self):
         self.selected_row_index = self.table.currentRow()
-        self.selected_program_number = self.table.model().index(self.selected_row_index, self.program_column_index).data()
+        self.selected_program_number = self.table.model().index(self.selected_row_index,
+                                                                self.program_column_index).data()
         if self.selected_program_number is None:
             self.btn_change.setEnabled(False)
         else:
@@ -458,15 +459,64 @@ class AddDialog(Dialog):
         self.request_dict = self.get_data_from_table()
 
         main_data = [self.request_dict[column_name] for column_name in self.vertical_headers[:4]]
-        print(main_data)
 
-        if all(bool(i) for i in main_data):
-            if (
-            op_number := self.request_dict[self.vertical_headers[self.op_number_index]]) is None or op_number.isdigit():
-                if not all(i == ' ' for i in self.request_dict[self.vertical_headers[self.detail_code_index]]):
-                    add_new_row(self.request_dict)
-                    self.close()
-                    self.main_window.update_data_in_table()
+        cond1 = all(i for i in main_data)
+        cond2 = (op_number := self.request_dict[self.vertical_headers[self.op_number_index]]) is None or op_number.isdigit()
+
+        if cond1 and main_data[1].strip():
+            if cond2:
+                add_new_row(self.request_dict)
+                self.close()
+                self.main_window.update_data_in_table()
+            else:
+                self.inf = InfoDialog(self, 'Полe "Номер операции" должно быть числом')
+                self.inf.show()
+        else:
+            self.inf = InfoDialog(self, 'Поля помеченные красным должны быть заполнены')
+            self.inf.show()
+
+
+class InfoDialog(QDialog):
+    btn_font = QtGui.QFont()
+    btn_font.setPointSize(8)
+    btn_font.setBold(True)
+    btn_font.setWeight(50)
+
+    def __init__(self, dlg_window, message):
+        super().__init__()
+        self.setWindowTitle('Предупреждение')
+        self.setWindowFlags(
+            QtCore.Qt.Window |
+            QtCore.Qt.WindowTitleHint |
+            QtCore.Qt.CustomizeWindowHint
+        )
+
+        self.dlg_window = dlg_window
+        self.message = message
+        self.textBrowser = QtWidgets.QTextBrowser(self)
+        self.textBrowser.setEnabled(True)
+        self.textBrowser.setGeometry(QtCore.QRect(25, 10, 175, 111))
+        self.textBrowser.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.textBrowser.setFrameShadow(QtWidgets.QFrame.Plain)
+        self.textBrowser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.textBrowser.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.textBrowser.setAutoFormatting(QtWidgets.QTextEdit.AutoBulletList)
+        self.textBrowser.setText(self.message)
+
+        self.resize(225, 170)
+
+        self.btn_ok = QtWidgets.QPushButton('Ok', self)
+        self.btn_ok.setGeometry(QtCore.QRect(75, 135, 75, 23))
+        self.btn_ok.setFont(self.btn_font)
+        self.btn_ok.clicked.connect(self.btn_ok_func)
+
+    def btn_ok_func(self):
+        self.close()
+        self.dlg_window.setEnabled(True)
+
+    def showEvent(self, event):
+        event.accept()
+        self.dlg_window.setEnabled(False)
 
 
 class ChangeDialog(Dialog):
@@ -537,18 +587,26 @@ class ChangeDialog(Dialog):
         """Функция кнопки изменения записи"""
 
         self.request_dict = self.get_data_from_table()
-        self.change_one_row_in_database(self.request_dict)
-        self.close()
-        self.main_window.update_data_in_table()
+        cond1 = (x := self.request_dict[self.vertical_headers[self.op_number_index]].strip()).isdigit() or x == ''
+        cond2 = (y := self.request_dict[self.vertical_headers[self.machine_time_index]].strip()).isdigit() or y == ''
+
+        if cond1 and cond2:
+            self.change_one_row_in_database(self.request_dict)
+            self.close()
+            self.main_window.update_data_in_table()
+        else:
+            self.a = InfoDialog(self, 'Поля "Номер операции" и "Машинное время" должны быть числами')
+            self.a.show()
 
     def change_one_row_in_database(self, data_dict):
         p_num = self.main_window.selected_program_number
         for k, v in data_dict.items():
             if not v or k == self.vertical_headers[self.creating_day_index]:
                 continue
-            if k in (self.vertical_headers[self.calculation_date_index], self.vertical_headers[self.ok_date_index], self.vertical_headers[self.introduction_date_index]):
+            if k in (self.vertical_headers[self.calculation_date_index], self.vertical_headers[self.ok_date_index],
+                     self.vertical_headers[self.introduction_date_index]):
                 v = datetime.strptime(v, "%d.%m.%Y")
-                print(v)
+
             change_data_in_cell(k, v, p_num)
 
     def showEvent(self, event):
