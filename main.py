@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 import sys
+import traceback
 from datetime import datetime, timedelta
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtWidgets import QApplication, QTableWidgetItem, QDialog
 
-from db import get_all_data, get_one_row, get_columns, add_new_row, change_data_in_cell
+from db import get_all_data, get_one_row, get_columns, add_new_row, change_data_in_cell, custom_selection
 from config_loader import engineers, machines, statuses, operation_types
 
 """Константы гланого окна"""
@@ -31,9 +32,57 @@ b_size_x = 150
 b_size_y = 50
 
 
+class InfoDialog(QDialog):
+    btn_font = QtGui.QFont()
+    btn_font.setPointSize(8)
+    btn_font.setBold(True)
+    btn_font.setWeight(50)
+
+    def __init__(self, dlg_window=None, message=None):
+        super().__init__()
+        self.setWindowTitle('Предупреждение')
+        self.setWindowFlags(
+            QtCore.Qt.Window |
+            QtCore.Qt.WindowTitleHint |
+            QtCore.Qt.CustomizeWindowHint
+        )
+
+        self.dlg_window = dlg_window
+        self.message = message
+        self.textBrowser = QtWidgets.QTextBrowser(self)
+        self.textBrowser.setEnabled(True)
+        self.textBrowser.setGeometry(QtCore.QRect(25, 10, 175, 111))
+        self.textBrowser.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.textBrowser.setFrameShadow(QtWidgets.QFrame.Plain)
+        self.textBrowser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.textBrowser.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.textBrowser.setAutoFormatting(QtWidgets.QTextEdit.AutoBulletList)
+        self.textBrowser.setText(self.message)
+
+        self.resize(225, 170)
+
+        self.btn_ok = QtWidgets.QPushButton('Ok', self)
+        self.btn_ok.setGeometry(QtCore.QRect(75, 135, 75, 23))
+        self.btn_ok.setFont(self.btn_font)
+        self.btn_ok.clicked.connect(self.btn_ok_func)
+
+    def btn_ok_func(self):
+        self.close()
+        if self.dlg_window:
+            self.dlg_window.setEnabled(True)
+
+    def showEvent(self, event):
+        event.accept()
+        if self.dlg_window:
+            self.dlg_window.setEnabled(False)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
+
+        self.request_dict = None
+
         self.selected_program_number = 'A0001'
         self.program_column_index = 3
         self.selected_row_index = 0
@@ -119,13 +168,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_select.setFont(font)
         self.btn_select.resize(b_size_x, b_size_y)
         self.btn_select.move(b_x * 3 + b_size_x * 2, b_y)
-        self.btn_select.setEnabled(False)
+        self.btn_select.clicked.connect(self.select_dlg.show)
 
-        self.btn_settings = QtWidgets.QPushButton('Настройки', self)
-        self.btn_settings.setFont(font)
-        self.btn_settings.resize(b_size_x, b_size_y)
-        self.btn_settings.move(b_x * 4 + b_size_x * 3, b_y)
-        self.btn_settings.setEnabled(False)
+        # self.btn_settings = QtWidgets.QPushButton('Настройки', self)
+        # self.btn_settings.setFont(font)
+        # self.btn_settings.resize(b_size_x, b_size_y)
+        # self.btn_settings.move(b_x * 4 + b_size_x * 3, b_y)
+        # self.btn_settings.setEnabled(False)
 
         self.btn_update = QtWidgets.QPushButton('Обновить', self)
         self.btn_update.setFont(font)
@@ -138,6 +187,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.add_dlg = AddDialog(self)
         self.change_dlg = ChangeDialog(self)
+        self.select_dlg = SelectDialog(self)
 
     def make_disabled(self):
         """Главное окно недоступно"""
@@ -149,10 +199,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.setEnabled(True)
 
-    def update_data_in_table(self):
+    def update_data_in_table(self, request_dict=None):
         """Обновить данные в таблице"""
 
-        data = get_all_data()
+        self.table.clearContents()
+
+        if not request_dict:
+            data = get_all_data()
+        else:
+            self.request_dict = request_dict
+            data = custom_selection(request_dict)
+
         self.rows = len(data)
 
         if self.rows < 25:
@@ -192,8 +249,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         self.add_dlg.close()
         self.change_dlg.close()
-        # self.settings_dlg.close()
-        # self.select_dlg.close()
+        self.select_dlg.close()
         event.accept()
 
 
@@ -378,12 +434,11 @@ class Dialog(QDialog):
         self.main_window.make_enabled()
         event.accept()
 
-    def keyPressEvent(self, e):
-        if e.key() == QtCore.Qt.Key_Escape:
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Escape:
             self.close()
-        if e.key() == QtCore.Qt.Key_Enter:
+        if event.key() == 16777220 or event.key() == 16777221:
             self.btn_ok.click()
-            self.close()
 
     def center(self):
         """Центрирование диалогового окна"""
@@ -395,7 +450,6 @@ class Dialog(QDialog):
 
 
 class AddDialog(Dialog):
-
     def __init__(self, main_window):
         super().__init__(main_window)
         self.setWindowTitle('Добавить запись')
@@ -429,6 +483,9 @@ class AddDialog(Dialog):
         self.op_number_index = 4
         self.dop_inf_index = 5
 
+        self.inf1 = InfoDialog(self, 'Полe "Номер операции" должно быть числом')
+        self.inf2 = InfoDialog(self, 'Поля помеченные красным должны быть заполнены')
+
         self.setup_add_widgets()
 
     def setup_add_widgets(self):
@@ -461,68 +518,27 @@ class AddDialog(Dialog):
         main_data = [self.request_dict[column_name] for column_name in self.vertical_headers[:4]]
 
         cond1 = all(i for i in main_data)
-        cond2 = (op_number := self.request_dict[self.vertical_headers[self.op_number_index]]) is None or op_number.isdigit()
+        cond2 = (op_number := self.request_dict[self.vertical_headers[self.op_number_index]]) is None \
+                or op_number.isdigit() \
+                or op_number == ''
 
         if cond1 and main_data[1].strip():
             if cond2:
                 add_new_row(self.request_dict)
                 self.close()
                 self.main_window.update_data_in_table()
+                self.main_window.table.selectRow(self.main_window.table.rowCount() - 1)
             else:
-                self.inf = InfoDialog(self, 'Полe "Номер операции" должно быть числом')
-                self.inf.show()
+                self.inf1.show()
         else:
-            self.inf = InfoDialog(self, 'Поля помеченные красным должны быть заполнены')
-            self.inf.show()
-
-
-class InfoDialog(QDialog):
-    btn_font = QtGui.QFont()
-    btn_font.setPointSize(8)
-    btn_font.setBold(True)
-    btn_font.setWeight(50)
-
-    def __init__(self, dlg_window, message):
-        super().__init__()
-        self.setWindowTitle('Предупреждение')
-        self.setWindowFlags(
-            QtCore.Qt.Window |
-            QtCore.Qt.WindowTitleHint |
-            QtCore.Qt.CustomizeWindowHint
-        )
-
-        self.dlg_window = dlg_window
-        self.message = message
-        self.textBrowser = QtWidgets.QTextBrowser(self)
-        self.textBrowser.setEnabled(True)
-        self.textBrowser.setGeometry(QtCore.QRect(25, 10, 175, 111))
-        self.textBrowser.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.textBrowser.setFrameShadow(QtWidgets.QFrame.Plain)
-        self.textBrowser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.textBrowser.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.textBrowser.setAutoFormatting(QtWidgets.QTextEdit.AutoBulletList)
-        self.textBrowser.setText(self.message)
-
-        self.resize(225, 170)
-
-        self.btn_ok = QtWidgets.QPushButton('Ok', self)
-        self.btn_ok.setGeometry(QtCore.QRect(75, 135, 75, 23))
-        self.btn_ok.setFont(self.btn_font)
-        self.btn_ok.clicked.connect(self.btn_ok_func)
-
-    def btn_ok_func(self):
-        self.close()
-        self.dlg_window.setEnabled(True)
-
-    def showEvent(self, event):
-        event.accept()
-        self.dlg_window.setEnabled(False)
+            self.inf2.show()
 
 
 class ChangeDialog(Dialog):
     def __init__(self, main_window):
         super().__init__(main_window)
         self.setWindowTitle('Изменить запись')
+        self.inf = InfoDialog(self, 'Поля "Номер операции" и "Машинное время" должны быть числами')
         self.setup_change_widgets()
         self.flag = True
 
@@ -593,10 +609,9 @@ class ChangeDialog(Dialog):
         if cond1 and cond2:
             self.change_one_row_in_database(self.request_dict)
             self.close()
-            self.main_window.update_data_in_table()
+            self.main_window.update_data_in_table(self.main_window.request_dict)
         else:
-            self.a = InfoDialog(self, 'Поля "Номер операции" и "Машинное время" должны быть числами')
-            self.a.show()
+            self.inf.show()
 
     def change_one_row_in_database(self, data_dict):
         p_num = self.main_window.selected_program_number
@@ -615,13 +630,53 @@ class ChangeDialog(Dialog):
         self.update_standard_combo_boxes()
 
 
-class SettingsDialog(Dialog):
-    pass
-
-
 class SelectDialog(Dialog):
-    pass
+    def __init__(self, main_window):
+        super().__init__(main_window)
+        self.setWindowTitle('Изменить запись')
+        self.inf = InfoDialog(self, 'Хотя бы одно поле должно быть заполнено')
+        self.vertical_headers = self.vertical_headers[0:7]
+        self.setup_select_widgets()
 
+    def setup_select_widgets(self):
+        self.setup_standard_dialog_table(self.vertical_headers)
+        self.setup_standard_dialog_btn_layout()
+        self.setup_standard_dialog_buttons()
+        self.setup_standard_dialog_combo_boxes()
+
+    # def setup_standard_dialog_table(self, vertical_headers):
+    #     super().setup_standard_dialog_table(vertical_headers)
+    #     self.setFixedSize(self.t_width + 10, self.t_height + 400)
+    #     self.center()
+
+    # def setup_standard_dialog_btn_layout(self):
+    #     super().setup_standard_dialog_btn_layout()
+    #     self.horizontalLayoutWidget.move(0, 520)
+
+    def setup_standard_dialog_buttons(self):
+        self.btn_ok = QtWidgets.QPushButton('Выборка', self.horizontalLayoutWidget)
+        self.btn_ok.setFont(self.btn_font)
+        self.btn_ok.clicked.connect(self.btn_ok_func)
+        self.horizontalLayout.addWidget(self.btn_ok)
+        super().setup_standard_dialog_buttons()
+
+    def btn_ok_func(self):
+        self.request_dict = {k: v for k, v in self.get_data_from_table().items() if bool(v)}
+        if self.request_dict:
+            self.main_window.update_data_in_table(self.request_dict)
+            self.close()
+        else:
+            self.inf.show()
+
+
+
+def log_uncaught_exceptions(ex_cls, ex, tb):
+    text = f'{ex_cls.__name__}: {ex}:\n' + ''.join(traceback.format_tb(tb))
+    QtWidgets.QMessageBox.critical(None, 'Error', text)
+    sys.exit()
+
+
+sys.excepthook = log_uncaught_exceptions
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -631,6 +686,7 @@ if __name__ == "__main__":
         window = MainWindow()
         window.show()
     except Exception as e:
-        raise e
+        a = InfoDialog(message='Не установлена связь с БД!')
+        a.show()
 
     sys.exit(app.exec_())

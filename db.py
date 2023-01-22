@@ -4,6 +4,7 @@ from config_loader import connection_parameters
 
 table = connection_parameters['table']
 
+
 def open_connection():
     connection = pymysql.connect(
         host=connection_parameters['host'],
@@ -30,7 +31,7 @@ def get_last_program():
                 return 'A0000'
 
     except Exception as e:
-        print(e)
+        raise
 
     finally:
         connection.close()
@@ -55,10 +56,11 @@ def get_all_data():
             result = cursor.fetchall()
             return result
 
-        connection.close()
+    except:
+        raise
 
-    except Exception as e:
-        print(e)
+    finally:
+        connection.close()
 
 
 def get_columns():
@@ -71,10 +73,11 @@ def get_columns():
             result = cursor.fetchall()
             return [i['Field'] for i in result if i['Field'] != 'id']
 
-        connection.close()
+    except:
+        raise
 
-    except Exception as e:
-        print(e)
+    finally:
+        connection.close()
 
 
 def add_new_row(request_dict):
@@ -98,8 +101,8 @@ def add_new_row(request_dict):
             cursor.execute(sql, q)
             connection.commit()
 
-    except Exception as e:
-        print(e)
+    except:
+        raise
 
     finally:
         connection.close()
@@ -115,27 +118,48 @@ def get_one_row(program_number):
             result = cursor.fetchone()
             return result
 
-        connection.close()
+    except:
+        raise
 
-    except Exception as e:
-        print(e)
+    finally:
+        connection.close()
 
 
 def change_data_in_cell(k, v, p_num):
     try:
         connection = open_connection()
 
-        # q = [k, v, p_num]
-
         with connection.cursor() as cursor:
             sql = f"update programs set `{k}` = '{v}' where `Номер программы` = '{p_num}'"
             cursor.execute(sql)
             connection.commit()
 
+    except:
+        raise
+
+    finally:
         connection.close()
 
-    except Exception as e:
-        print(e)
 
+def custom_selection(dct):
+    sql = f"select * from programs where "
+    a = []
+    for k, v in dct.items():
+        a.append(f"`{k}` like '%{v}%'")
 
-# change_data_in_cell('Инженер', 'вадим', 'A0001')
+    sql += ' and '.join(a)
+
+    try:
+        connection = open_connection()
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+
+        result = cursor.fetchall()
+        return result
+
+    except:
+        raise
+
+    finally:
+        connection.close()

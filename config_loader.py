@@ -7,7 +7,9 @@ connection_parameters = data['connection_parameters']
 engineers = data['engineers']
 machines = data['machines']
 statuses = data['statuses']
+path = data['path']
 operation_types = data['operation_types']
 engineers.sort()
 machines.sort()
+
 
