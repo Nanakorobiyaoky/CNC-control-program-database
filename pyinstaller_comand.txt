@@ -1,0 +1,1 @@
+pyinstaller main.py --icon=icon.ico -D --noconsole --add-data "icon.ico;." --add-data "config.json;." --name BTZ

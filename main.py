@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
+import os
 import sys
 import traceback
+import subprocess
 from datetime import datetime, timedelta
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtWidgets import QApplication, QTableWidgetItem, QDialog
 
 from db import get_all_data, get_one_row, get_columns, add_new_row, change_data_in_cell, custom_selection
-from config_loader import engineers, machines, statuses, operation_types
+from config_loader import engineers, machines, statuses, operation_types, path
 
 """Константы гланого окна"""
 width = 1920 - 320
@@ -33,6 +35,7 @@ b_size_y = 50
 
 
 class InfoDialog(QDialog):
+    """класс для вывода диалогового окна с предупреждениями"""
     btn_font = QtGui.QFont()
     btn_font.setPointSize(8)
     btn_font.setBold(True)
@@ -51,7 +54,7 @@ class InfoDialog(QDialog):
         self.message = message
         self.textBrowser = QtWidgets.QTextBrowser(self)
         self.textBrowser.setEnabled(True)
-        self.textBrowser.setGeometry(QtCore.QRect(25, 10, 175, 111))
+        self.textBrowser.setGeometry(QtCore.QRect(5, 5, 215, 125))
         self.textBrowser.setFrameShape(QtWidgets.QFrame.NoFrame)
         self.textBrowser.setFrameShadow(QtWidgets.QFrame.Plain)
         self.textBrowser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
@@ -86,6 +89,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.selected_program_number = 'A0001'
         self.program_column_index = 3
         self.selected_row_index = 0
+        self.detail_code_index = 1
         self.setup_window()
         self.setup_table()
         self.setup_dialog_windows()
@@ -136,9 +140,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.table.itemSelectionChanged.connect(self.on_selection)
 
     def on_selection(self):
+        """Настройки выделения"""
         self.selected_row_index = self.table.currentRow()
         self.selected_program_number = self.table.model().index(self.selected_row_index,
                                                                 self.program_column_index).data()
+        self.selected_detail_code = self.table.model().index(self.selected_row_index,
+                                                             self.detail_code_index).data()
+
         if self.selected_program_number is None:
             self.btn_change.setEnabled(False)
         else:
@@ -170,17 +178,31 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_select.move(b_x * 3 + b_size_x * 2, b_y)
         self.btn_select.clicked.connect(self.select_dlg.show)
 
-        # self.btn_settings = QtWidgets.QPushButton('Настройки', self)
-        # self.btn_settings.setFont(font)
-        # self.btn_settings.resize(b_size_x, b_size_y)
-        # self.btn_settings.move(b_x * 4 + b_size_x * 3, b_y)
-        # self.btn_settings.setEnabled(False)
+        self.btn_open_dir = QtWidgets.QPushButton('Открыть\nпапку', self)
+        self.btn_open_dir.setFont(font)
+        self.btn_open_dir.resize(b_size_x, b_size_y)
+        self.btn_open_dir.move(b_x * 4 + b_size_x * 3, b_y)
+        self.btn_open_dir.clicked.connect(self.open_dir)
 
         self.btn_update = QtWidgets.QPushButton('Обновить', self)
         self.btn_update.setFont(font)
         self.btn_update.resize(b_size_x, b_size_y)
         self.btn_update.move(b_x * 5 + b_size_x * 4, b_y)
-        self.btn_update.clicked.connect(self.update_data_in_table)
+        self.btn_update.clicked.connect(self.btn_update_func)
+
+    def btn_update_func(self):
+        """функция кнопки обновления таблицы"""
+        self.request_dict = None
+        self.update_data_in_table(self.request_dict)
+
+    def open_dir(self):
+        """функция кнопки открытия директории"""
+        dirs = os.listdir(path)
+        if self.selected_detail_code in dirs:
+            subprocess.Popen(fr'explorer {path}\{self.selected_detail_code}')
+        else:
+            os.mkdir(f'{path}\\{self.selected_detail_code}')
+            subprocess.Popen(fr'explorer {path}\{self.selected_detail_code}')
 
     def setup_dialog_windows(self):
         """Загрузка диалоговых окон"""
@@ -195,7 +217,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setEnabled(False)
 
     def make_enabled(self):
-        """Главное доступно"""
+        """Главное окно доступно"""
 
         self.setEnabled(True)
 
@@ -254,6 +276,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
 class Dialog(QDialog):
+    """Класс родителя диалоговых окон"""
     btn_font = QtGui.QFont()
     btn_font.setPointSize(8)
     btn_font.setBold(True)
@@ -334,6 +357,8 @@ class Dialog(QDialog):
         self.horizontalLayout.addWidget(self.btn_cancel)
 
     def setup_standard_dialog_combo_boxes(self):
+        """Загрузка комбобоксов для определенных полей"""
+
         self.cmb_engineers = QtWidgets.QComboBox()
         self.cmb_engineers.addItem(None)
         for name in engineers:
@@ -405,6 +430,8 @@ class Dialog(QDialog):
         return result
 
     def update_table_model(self):
+        """Расположение комбобоксов"""
+
         if self.name_index is not None:
             self.table.setItem(self.name_index, 0, QTableWidgetItem(self.cmb_engineers.currentText()))
         if self.machine_index is not None:
@@ -423,6 +450,7 @@ class Dialog(QDialog):
                                QTableWidgetItem(self.cmb_introduction_date.currentText()))
 
     def btn_clear_func(self):
+        """Функция кнопки очистки полей"""
         self.table.clearContents()
         self.setup_standard_dialog_combo_boxes()
 
@@ -450,6 +478,8 @@ class Dialog(QDialog):
 
 
 class AddDialog(Dialog):
+    """Окно добавления записи"""
+
     def __init__(self, main_window):
         super().__init__(main_window)
         self.setWindowTitle('Добавить запись')
@@ -535,6 +565,8 @@ class AddDialog(Dialog):
 
 
 class ChangeDialog(Dialog):
+    """Окно изменения записи"""
+
     def __init__(self, main_window):
         super().__init__(main_window)
         self.setWindowTitle('Изменить запись')
@@ -543,7 +575,7 @@ class ChangeDialog(Dialog):
         self.flag = True
 
     def setup_change_widgets(self):
-        """Загрузка виджетов для окна добавления записи"""
+        """Загрузка виджетов для окна изменения записи"""
 
         self.setup_standard_dialog_table(self.vertical_headers)
         self.setup_standard_dialog_btn_layout()
@@ -581,6 +613,8 @@ class ChangeDialog(Dialog):
             self.flag = False
 
     def insert_data_into_table(self):
+        """Подгрузка данных из выбранной строки в таблицу окна"""
+
         if self.main_window.selected_program_number is not None:
             p_num = self.main_window.selected_program_number
             data_for_insert = get_one_row(p_num)
@@ -614,6 +648,8 @@ class ChangeDialog(Dialog):
             self.inf.show()
 
     def change_one_row_in_database(self, data_dict):
+        """Изменение записи"""
+
         p_num = self.main_window.selected_program_number
         for k, v in data_dict.items():
             if not v or k == self.vertical_headers[self.creating_day_index]:
@@ -631,27 +667,22 @@ class ChangeDialog(Dialog):
 
 
 class SelectDialog(Dialog):
+    """Окно выборки"""
+
     def __init__(self, main_window):
         super().__init__(main_window)
-        self.setWindowTitle('Изменить запись')
+        self.setWindowTitle('Выборка')
         self.inf = InfoDialog(self, 'Хотя бы одно поле должно быть заполнено')
         self.vertical_headers = self.vertical_headers[0:7]
         self.setup_select_widgets()
 
     def setup_select_widgets(self):
+        """Загрузка виджетов для окна выборки"""
+
         self.setup_standard_dialog_table(self.vertical_headers)
         self.setup_standard_dialog_btn_layout()
         self.setup_standard_dialog_buttons()
         self.setup_standard_dialog_combo_boxes()
-
-    # def setup_standard_dialog_table(self, vertical_headers):
-    #     super().setup_standard_dialog_table(vertical_headers)
-    #     self.setFixedSize(self.t_width + 10, self.t_height + 400)
-    #     self.center()
-
-    # def setup_standard_dialog_btn_layout(self):
-    #     super().setup_standard_dialog_btn_layout()
-    #     self.horizontalLayoutWidget.move(0, 520)
 
     def setup_standard_dialog_buttons(self):
         self.btn_ok = QtWidgets.QPushButton('Выборка', self.horizontalLayoutWidget)
@@ -661,6 +692,8 @@ class SelectDialog(Dialog):
         super().setup_standard_dialog_buttons()
 
     def btn_ok_func(self):
+        """Функция кнопки выборки"""
+
         self.request_dict = {k: v for k, v in self.get_data_from_table().items() if bool(v)}
         if self.request_dict:
             self.main_window.update_data_in_table(self.request_dict)
@@ -669,8 +702,9 @@ class SelectDialog(Dialog):
             self.inf.show()
 
 
-
 def log_uncaught_exceptions(ex_cls, ex, tb):
+    """Функция для отлова ошибок и вывода текста ошибок в окне"""
+
     text = f'{ex_cls.__name__}: {ex}:\n' + ''.join(traceback.format_tb(tb))
     QtWidgets.QMessageBox.critical(None, 'Error', text)
     sys.exit()
@@ -682,11 +716,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
 
-    try:
-        window = MainWindow()
-        window.show()
-    except Exception as e:
-        a = InfoDialog(message='Не установлена связь с БД!')
-        a.show()
+    window = MainWindow()
+    window.show()
 
     sys.exit(app.exec_())
