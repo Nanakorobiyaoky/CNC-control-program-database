@@ -234,7 +234,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.rows = len(data)
 
-        if self.rows < 25:
+        if self.rows < 20:
             self.table.setRowCount(visible_rows)
         else:
             self.table.setRowCount(self.rows)
